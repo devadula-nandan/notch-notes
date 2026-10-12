@@ -173,8 +173,9 @@ final class NotchWindowController: NSWindowController {
 
     // Padded by 1pt: CGRect.contains excludes the max edges, and the cursor sits
     // exactly on the top edge at the top of the screen, which made hover flicker
+    // The open panel gets 8pt of slack round its visible body, so slipping just past an edge doesn't close it
     private var isMouseInside: Bool {
-        (isExpanded ? expandedFrame : collapsedFrame).insetBy(dx: -1, dy: -1).contains(NSEvent.mouseLocation)
+        (isExpanded ? expandedFrame.insetBy(dx: expandedRadius - 8, dy: -8) : collapsedFrame.insetBy(dx: -1, dy: -1)).contains(NSEvent.mouseLocation)
     }
 
     // A sliver taller than the notch, for the line under it while a page plays sound
@@ -232,14 +233,17 @@ final class NotchWindowController: NSWindowController {
         webHost.wantsLayer = true
         webHost.layer?.mask = webMask
         [scrollView, webHost, loadingPill, pager, quitButton, otaButton, lockButton, captureButton, moreButton].forEach(panel.addSubview)
-        for right in [false, true] {
-            let grip = ResizeHandle(right: right)
-            grip.wc = self
-            if right {
-                grip.frame.origin.x = panelW - grip.frame.width
-                grip.autoresizingMask = [.minXMargin]
-            }
-            panel.addSubview(grip)
+        // Resize grips, under the note dots: left, right and bottom edge strips, then the two corners over their ends
+        let w = panelW, e = webInset, c: CGFloat = 28, r = expandedRadius + 8, h = panelH - expandedRadius - r
+        let grips: [(CGFloat, CGFloat, CGRect, NSView.AutoresizingMask)] = [
+            (-2, 0, CGRect(x: 0, y: r, width: e, height: h), [.height]), (2, 0, CGRect(x: w - e, y: r, width: e, height: h), [.minXMargin, .height]),
+            (0, 1, CGRect(x: r, y: 0, width: w - 2 * r, height: e), [.width]),
+            (-2, 1, CGRect(x: 0, y: 0, width: c, height: c), []), (2, 1, CGRect(x: w - c, y: 0, width: c, height: c), [.minXMargin]),
+        ]
+        for (dx, dy, frame, mask) in grips {
+            let grip = ResizeHandle(pull: CGVector(dx: dx, dy: dy), frame: frame)
+            (grip.wc, grip.autoresizingMask) = (self, mask)
+            panel.addSubview(grip, positioned: .below, relativeTo: pager)
         }
         [tray, hintView].forEach(panel.addSubview)
         cv.addSubview(panel)

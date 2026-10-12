@@ -67,6 +67,7 @@ final class NotePager: NSView {
     var onAdd: (() -> Void)?
     private var count = 1
     private var current = 0
+    private var hover: Int? { didSet { needsDisplay = true } }    // slot under the mouse
 
     // One slot per dot and one for the +; the slots narrow if the panel can't fit them all
     var idealWidth: CGFloat { CGFloat(count + 1) * 14 }
@@ -78,11 +79,14 @@ final class NotePager: NSView {
         needsDisplay = true
     }
 
+    // Under the mouse the dots grow inside a capsule, like the iOS page control
     override func draw(_ dirtyRect: NSRect) {
-        let y = bounds.midY
+        let y = bounds.midY, grow: CGFloat = hover == nil ? 0 : 1
+        NSColor(white: 1, alpha: hover == nil ? 0 : 0.16).setFill()
+        NSBezierPath(roundedRect: bounds.insetBy(dx: 0, dy: 1), xRadius: y - 1, yRadius: y - 1).fill()
         for i in 0..<count {
-            let x = slot * (CGFloat(i) + 0.5), r: CGFloat = i == current ? 2.5 : 2
-            NSColor(white: 1, alpha: i == current ? 0.85 : 0.3).setFill()
+            let x = slot * (CGFloat(i) + 0.5), r = (i == current ? 2.5 : 2) + grow
+            NSColor(white: 1, alpha: i == current ? 0.85 : i == hover ? 0.6 : 0.3).setFill()
             NSBezierPath(ovalIn: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r)).fill()
         }
         let x = slot * (CGFloat(count) + 0.5), arm: CGFloat = 3
@@ -97,10 +101,19 @@ final class NotePager: NSView {
         plus.stroke()
     }
 
+    private func slot(at event: NSEvent) -> Int { Int(convert(event.locationInWindow, from: nil).x / max(slot, 1)) }
+
     override func mouseDown(with event: NSEvent) {
-        let i = Int(convert(event.locationInWindow, from: nil).x / max(slot, 1))
+        let i = slot(at: event)
         if i < count { onSelect?(max(i, 0)) } else { onAdd?() }
     }
+
+    override func viewDidMoveToWindow() {
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect], owner: self))
+    }
+    override func mouseMoved(with event: NSEvent) { hover = slot(at: event) }
+    override func mouseExited(with event: NSEvent) { hover = nil }
+    override func mouseDragged(with event: NSEvent) { onSelect?(slot(at: event)) }    // scrubbing
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
@@ -118,7 +131,9 @@ final class NotePager: NSView {
 class ArrowTextView: NSTextView {
     override func resetCursorRects() { addCursorRect(visibleRect, cursor: .arrow) }
     override func cursorUpdate(with event: NSEvent) { NSCursor.arrow.set() }
-    override func mouseMoved(with event: NSEvent) { NSCursor.arrow.set() }
+    override func mouseMoved(with event: NSEvent) {
+        if !(window?.contentView?.hitTest(event.locationInWindow) is ResizeHandle) { NSCursor.arrow.set() }
+    }
 }
 
 // MARK: - Fading text field (overflowing text fades out at whichever edge is clipped)
@@ -341,19 +356,21 @@ final class FontSizeField: NSView, NSTextFieldDelegate {
     }
 }
 
-// MARK: - Resize grip (bottom corners)
+// MARK: - Resize grips (bottom corners, and the edges between them)
 
 final class ResizeHandle: NSView {
     weak var wc: NotchWindowController?
-    private let isRight: Bool
+    private let pull: CGVector     // panel growth per point dragged: both ways for a corner, one for an edge
+    private var isEdge: Bool { pull.dx * pull.dy == 0 }
+    private var lit = false { didSet { needsDisplay = true } }
     private var startMouse = NSPoint.zero
     private var startSize = CGSize.zero
-    private var hovering = false { didSet { needsDisplay = true } }
-    private var dragging = false { didSet { needsDisplay = true } }
+    private var hovering = false { didSet { show() } }
+    private var dragging = false { didSet { show() } }
 
-    init(right: Bool) {
-        isRight = right
-        super.init(frame: CGRect(x: 0, y: 0, width: 28, height: 28))
+    init(pull: CGVector, frame: CGRect) {
+        self.pull = pull
+        super.init(frame: frame)
         addTrackingArea(NSTrackingArea(rect: .zero,
                                        options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
                                        owner: self, userInfo: nil))
@@ -361,10 +378,17 @@ final class ResizeHandle: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    // A corner shows its grabber; an edge shows a resize cursor and lights the corners at its ends
+    private func show() {
+        let on = hovering || dragging
+        if isEdge { (on ? pull.dy == 0 ? NSCursor.resizeLeftRight : .resizeUpDown : .arrow).set() }
+        for case let h as ResizeHandle in superview?.subviews ?? [] where h === self || isEdge && h.pull.dx != -pull.dx { h.lit = on }
+    }
+
     // Curved grabber running along the centre of the black border, parallel to the panel's corner
     private lazy var grabber: CGPath = {
         let d = webInset / 2, tail: CGFloat = 2
-        func at(_ p: CGPoint) -> CGPoint { CGPoint(x: isRight ? bounds.width - p.x : p.x, y: p.y) }
+        func at(_ p: CGPoint) -> CGPoint { CGPoint(x: pull.dx > 0 ? bounds.width - p.x : p.x, y: p.y) }
         let path = CGMutablePath()
         path.move(to: at(CGPoint(x: d, y: expandedRadius + tail)))
         cornerCurve(radius: expandedRadius, inset: d).forEach { path.addLine(to: at($0)) }
@@ -375,15 +399,15 @@ final class ResizeHandle: NSView {
     // Only a band around the grabber resizes; the rest of the corner square belongs to the content
     private lazy var hitArea = grabber.copy(strokingWithWidth: 12, lineCap: .round, lineJoin: .round, miterLimit: 1)
 
-    private func onGrabber(_ event: NSEvent) -> Bool { hitArea.contains(convert(event.locationInWindow, from: nil)) }
+    private func onGrabber(_ event: NSEvent) -> Bool { window?.contentView?.hitTest(event.locationInWindow) === self }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        hitArea.contains(convert(point, from: superview)) ? self : nil
+        isEdge ? super.hitTest(point) : hitArea.contains(convert(point, from: superview)) ? self : nil
     }
 
     // Shown on hover / drag
     override func draw(_ dirtyRect: NSRect) {
-        guard hovering || dragging, let ctx = NSGraphicsContext.current?.cgContext else { return }
+        guard lit, !isEdge, let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.addPath(grabber)
         ctx.setLineWidth(2.5)
         ctx.setLineCap(.round)
@@ -405,8 +429,8 @@ final class ResizeHandle: NSView {
     override func mouseDragged(with event: NSEvent) {
         let p = NSEvent.mouseLocation
         // Width grows on both sides so the panel stays centered on the notch
-        wc?.resizePanel(to: CGSize(width: startSize.width + (p.x - startMouse.x) * (isRight ? 2 : -2),
-                                   height: startSize.height + startMouse.y - p.y))
+        wc?.resizePanel(to: CGSize(width: startSize.width + (p.x - startMouse.x) * pull.dx,
+                                   height: startSize.height + (startMouse.y - p.y) * pull.dy))
     }
 
     override func mouseUp(with event: NSEvent) {
