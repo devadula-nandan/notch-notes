@@ -1,5 +1,6 @@
 import Cocoa
 import WebKit
+import SwiftTerm
 import NotchNotesCore
 
 // MARK: - Window
@@ -14,7 +15,7 @@ final class NotchWindow: NSPanel {
               let key = event.charactersIgnoringModifiers?.lowercased()
         else { return super.performKeyEquivalent(with: event) }
 
-        // ⌘L, ⌘N and ⌘⇧[ / ⌘⇧] belong to the panel itself
+        // ⌘L, ⌘T, ⌘N and ⌘⇧[ / ⌘⇧] belong to the panel itself
         if let wc = windowController as? NotchWindowController, wc.handleShortcut(key) { return true }
 
         let actions: [String: Selector] = [
@@ -119,10 +120,12 @@ final class NotchWindowController: NSWindowController {
     }
     private var animationID = 0                                  // ignores completions from interrupted animations
 
-    private let panel = NSView()
+    let panel = NSView()
     let scrollView = NSScrollView()
     let textView = NoteTextView()
     var webView: WKWebView?
+    var terminals: [LocalProcessTerminalView] = []               // each made when asked for, dropped when its shell exits
+    var terminal: LocalProcessTerminalView?                      // the one shown, or last shown
     var popups: [WKWebView] = []                                 // windows the page opened, topmost last
     var webObservations: [ObjectIdentifier: [NSKeyValueObservation]] = [:]
     private var themeObservation: NSKeyValueObservation?
@@ -145,6 +148,7 @@ final class NotchWindowController: NSWindowController {
     private let checklistButton = IconButton("checklist", hint: "Checklist")
     private let numberedButton = IconButton("list.number", hint: "Numbered List")
     private let agentButton = IconButton("desktopcomputer", hint: "")
+    private let terminalButton = IconButton("terminal", hint: "Terminal")
     private let otaButton = IconButton("icloud.and.arrow.down", hint: "")
     private var otaTimer: Timer?
     let clearButton = IconButton("xmark.circle.fill", hint: "Close Page", width: clearW)
@@ -297,8 +301,8 @@ final class NotchWindowController: NSWindowController {
         loadNote(notes.index(named: UserDefaults.standard.string(forKey: "currentNote") ?? "") ?? 0)
         textView.onChange = { [weak self] in self?.scheduleSave(); self?.updateListButtons() }
         textView.onOpenLink = { [weak self] in self?.openLink($0) }
-        pager.onSelect = { [weak self] in self?.switchNote(to: $0) }
-        pager.onAdd = { [weak self] in self?.newNote() }
+        pager.onSelect = { [weak self] in self?.terminalShown == true ? self?.showTerminal($0) : self?.switchNote(to: $0) }
+        pager.onAdd = { [weak self] in self?.terminalShown == true ? self?.newTerminal() : self?.newNote() }
         NotificationCenter.default.addObserver(self, selector: #selector(updateListButtons),
                                                name: NSTextView.didChangeSelectionNotification, object: textView)
         scrollView.documentView = textView
@@ -321,6 +325,9 @@ final class NotchWindowController: NSWindowController {
         checklistButton.onClick = { [weak self] in self?.textView.toggleList(.checkbox) }
         numberedButton.tint = .systemBlue
         numberedButton.onClick = { [weak self] in self?.textView.toggleList(.numbered) }
+
+        terminalButton.tint = .systemPink
+        terminalButton.onClick = { [weak self] in self?.toggleTerminal() }
 
         agentButton.isActive = true
         agentButton.onClick = { [weak self] in self?.mobileAgent.toggle() }
@@ -364,7 +371,7 @@ final class NotchWindowController: NSWindowController {
         }
         urlBox.addSubview(clearButton)
 
-        for b in [quitButton, lockButton, captureButton, moreButton, checklistButton, numberedButton, agentButton, otaButton, clearButton] {
+        for b in [quitButton, lockButton, captureButton, moreButton, checklistButton, numberedButton, terminalButton, agentButton, otaButton, clearButton] {
             b.onHover = { [weak self, weak b] on in
                 if let self, let b { self.hover(b, on) }
             }
@@ -408,12 +415,17 @@ final class NotchWindowController: NSWindowController {
         clearButton.hint = popups.isEmpty ? "Close Page" : "Close Pop-up"
         textView.minSize = CGSize(width: 0, height: scrollView.contentSize.height)
         textView.frame.size.width = scrollView.contentSize.width
+        // The terminal has no margin of its own, so it gets the notes'. Its scroll bar is moved to the middle of the right one
+        let barW = NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)
+        terminal?.frame = CGRect(x: notesPad, y: notesPad, width: panelW - 2 * notesPad + barW, height: contentH - notesPad)
+        terminal?.subviews.first { $0 is NSScroller }?.frame.origin.x = panelW - 2 * notesPad - 3
         clipWebView()
 
-        // Note dots sit in the gap under the notes, between the resize grips
+        // Note dots sit in the gap under the notes, between the resize grips. Under the terminal they are its shells
+        if terminalShown { pager.set(count: terminals.count, current: terminalIndex) } else { pager.set(count: notes.count, current: noteIndex) }
         let pagerW = min(pager.idealWidth, panelW - 80)
         pager.frame = CGRect(x: ((panelW - pagerW) / 2).rounded(), y: 0, width: pagerW, height: notesPad)
-        pager.isHidden = webView != nil
+        pager.isHidden = scrollView.isHidden && !terminalShown
 
         // Top strip. Fixed: quit and one more button at the left edge, eye at the right, "…" beside it when needed.
         // That one button is the lock, or the update button while it shows
@@ -434,15 +446,17 @@ final class NotchWindowController: NSWindowController {
         }
 
         // Each side of the notch has the same space. The formatting tools only apply to notes and the
-        // agent button only to a page (where it sits just left of the URL field), so only one is shown at a time
+        // agent button only to a page (where it sits just left of the URL field), so only one is shown at a time.
+        // The terminal keeps the font size
         let side = (panelW - notchSize.width) / 2, toolsX = edgeInset + 2 * step
-        let web = webView != nil
-        formatTools.forEach { $0.isHidden = web }
+        let term = terminalShown, web = webView != nil && !term
+        formatTools.forEach { $0.isHidden = web || term && $0 !== sizeField }
         agentButton.isHidden = !web
+        terminalButton.isActive = term
 
         // Tools stay beside the notch while they fit; the rest move into the tray, last one first.
         // The lock leads them while the update button has its place
-        var x = toolsX, overflow: [NSView] = [], tools: [NSView] = web ? [] : formatTools
+        var x = toolsX, overflow: [NSView] = [], tools: [NSView] = [terminalButton] + formatTools.filter { !$0.isHidden }
         if otaButton.isHidden { place(lockButton, in: panel, x: edgeInset + step, y: y) } else { tools.insert(lockButton, at: 0) }
         for v in tools {
             if overflow.isEmpty, x + v.frame.width + notchGap <= side {
@@ -456,7 +470,7 @@ final class NotchWindowController: NSWindowController {
         // The URL field takes what's left on the right, after the eye and (once anything overflows) "…".
         // Its minimum is the width it has at the moment the first tool overflows, so the two go together
         let rightFixed = edgeInset + step + notchGap
-        let urlMinW = toolsX + rowWidth(formatTools) + notchGap - rightFixed - step
+        let urlMinW = toolsX + rowWidth([terminalButton] + formatTools) + notchGap - rightFixed - step
         let urlRoom = side - rightFixed - (overflow.isEmpty ? 0 : step) - (web ? step : 0)
         if urlRoom >= urlMinW {
             urlBox.frame.size.width = urlRoom.rounded(.down)
@@ -565,9 +579,9 @@ final class NotchWindowController: NSWindowController {
         }
     }
 
-    // Keyboard focus goes to the page (or its pop-up), else the notes
+    // Keyboard focus goes to the terminal, else the page (or its pop-up), else the notes
     func focusContent() {
-        window?.makeFirstResponder(shownWeb ?? textView)
+        window?.makeFirstResponder(terminalShown ? terminal : shownWeb ?? textView)
     }
 
     // MARK: - Keyboard
@@ -576,9 +590,10 @@ final class NotchWindowController: NSWindowController {
     func handleShortcut(_ key: String) -> Bool {
         switch key {
         case "l": focusURLField()
-        case "n" where webView == nil: newNote()
-        case "{" where webView == nil: stepNote(-1)
-        case "}" where webView == nil: stepNote(1)
+        case "t": toggleTerminal()
+        case "n" where !pager.isHidden: pager.onAdd?()
+        case "{" where !pager.isHidden: pager.step(-1)
+        case "}" where !pager.isHidden: pager.step(1)
         default: return false
         }
         return true
@@ -633,7 +648,6 @@ final class NotchWindowController: NSWindowController {
         textView.restyle()
         notesDirty = false
         UserDefaults.standard.set(notes.name(at: index), forKey: "currentNote")
-        pager.set(count: notes.count, current: index)
         updateListButtons()
     }
 
@@ -656,12 +670,6 @@ final class NotchWindowController: NSWindowController {
         // The note being shown is the new one if it's still empty
         guard webView == nil, noteUnreadable || !textView.string.isEmpty else { return }
         switchNote(to: notes.add())
-    }
-
-    // Next from the last note starts a new one
-    private func stepNote(_ delta: Int) {
-        let target = noteIndex + delta
-        if target == notes.count { newNote() } else { switchNote(to: target) }
     }
 
     // ⌘-clicked link in the notes: shown in the panel like any other page
@@ -717,6 +725,7 @@ final class NotchWindowController: NSWindowController {
     private func setFontSize(_ size: CGFloat) {
         fontSize = size
         textView.font = .monospacedSystemFont(ofSize: size, weight: .regular)
+        terminals.forEach { $0.font = .monospacedSystemFont(ofSize: size, weight: .regular) }
         textView.restyle()
         store(size, "fontSize")
     }

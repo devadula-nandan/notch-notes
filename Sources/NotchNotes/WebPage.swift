@@ -24,6 +24,7 @@ extension NotchWindowController {
             closeWebView()
             webURL = ""
         }
+        terminal?.isHidden = true   // the URL field leads to a page or the notes
         scrollView.isHidden = webView != nil
         webHost.isHidden = webView == nil
         webView?.isHidden = false

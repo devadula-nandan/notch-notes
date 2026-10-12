@@ -2,11 +2,11 @@
 
 **A notepad that lives in your MacBook's notch.**
 
-Hover over the notch and a panel drops down with your notes, a checklist or any web page. Move away and it disappears. There is no Dock icon, no menu bar icon and no window to manage.
+Hover over the notch and a panel drops down with your notes, a checklist, any web page or a terminal. Move away and it disappears. There is no Dock icon, no menu bar icon and no window to manage.
 
 [Website](https://devadula-nandan.github.io/notch-notes/) · [Features](#features) · [Install](#install) · [Usage](#usage) · [Your notes](#your-notes) · [Build from source](#build-from-source)
 
-[![A tour of NotchNotes: notes, checklists, lists, web pages, screen sharing and updates, each shown in the panel under the notch](docs/screenshots/tour.webp)](https://devadula-nandan.github.io/notch-notes/)
+[![A tour of NotchNotes: notes, checklists, lists, web pages, the terminal, Org mode, screen sharing and updates, each shown in the panel under the notch](docs/screenshots/tour.webp)](https://devadula-nandan.github.io/notch-notes/)
 
 **Requirements:** macOS 13 Ventura or later. Designed for Macs with a notch; on other Macs the panel sits at the top center of the screen.
 
@@ -30,11 +30,19 @@ Hover over the notch and a panel drops down with your notes, a checklist or any 
 - **Local addresses**: `localhost`, `.local` and bare IP addresses load over `http`.
 - **Light and dark**: pages follow the system appearance. The panel itself is always dark.
 
+### Terminal
+
+- **A shell in the panel**: the terminal button, or ⌘T, swaps the notes or the page for your login shell, started in your home folder. Full-screen programs such as Emacs (for Org mode), Vim or `htop` run in it.
+- **Several terminals**: the dots under the terminal switch between shells, and `+` starts another. ⌘N and ⌘⇧[ / ⌘⇧] work on them as they do on notes.
+- **Keeps running**: the shells and whatever runs in them stay alive while the panel is closed or showing the notes or a page. `exit` ends one; after the last, the next ⌘T starts a new one.
+- **Option is Meta**: Option-key combinations reach the program as Meta, as Emacs expects. ⌘⌥O switches that off and on.
+- **Font size**: shared with the notes.
+
 ### The panel
 
 - **Opens on hover or by hotkey**: rest the mouse on the notch, or press ⌃⌥N from any app.
 - **Lock open**: the lock button keeps the panel open when the mouse leaves, and stays set across launches.
-- **Resizable**: drag either bottom corner. The size is remembered.
+- **Resizable**: drag a bottom corner, or the left, right or bottom edge. The size is remembered.
 - **Hidden from screen sharing**: by default the panel is left out of screen recordings and screen shares. The eye button shows it.
 - **Stays in front**: the panel returns to the front when another app's overlay, such as a screen-share border, covers it.
 - **Fits any width**: toolbar buttons that don't fit move into a `…` tray.
@@ -66,17 +74,18 @@ Later versions arrive through the [update button](#updates), so these steps are 
 | Action | How |
 |---|---|
 | Open the panel | Hover over the notch, or press ⌃⌥N |
-| Close the panel | Move the mouse away, press ⌃⌥N, or press Esc while in the notes |
-| New note | Click `+` after the dots, or press ⌘N |
-| Switch notes | Click a dot, or press ⌘⇧[ / ⌘⇧] |
+| Close the panel | Move the mouse away, press ⌃⌥N, or press Esc while in the notes (a page or the terminal keeps Esc for itself) |
+| New note or terminal | Click `+` after the dots, or press ⌘N |
+| Switch notes or terminals | Click a dot, or press ⌘⇧[ / ⌘⇧]. From the last one, ⌘⇧] starts a new one |
 | Check or uncheck an item | Click its box |
 | Indent a list item | Tab / Shift-Tab |
 | Open a link from the notes | ⌘-click it |
+| Open or leave the terminal | Click the terminal button, or press ⌘T |
 | Go to the URL field | ⌘L |
 | Load a page | Type an address or a search, then press Return |
 | Back, forward, reload | ⌘[ / ⌘] / ⌘R |
 | Return to the notes | Click × in the URL field, or clear the field and press Return |
-| Resize the panel | Drag either bottom corner |
+| Resize the panel | Drag a bottom corner, or the left, right or bottom edge |
 | Quit | Click the red dot in the top left, or press ⌘Q |
 
 The standard editing shortcuts (⌘A, ⌘C, ⌘V, ⌘X, ⌘Z, ⌘⇧Z) work as usual.

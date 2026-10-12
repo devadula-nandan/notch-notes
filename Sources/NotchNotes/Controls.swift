@@ -60,7 +60,7 @@ final class IconButton: NSView {
     }
 }
 
-// MARK: - Note dots (one per note under the notes, then a + for a new one)
+// MARK: - Dots (one per note under the notes, or per shell under the terminal, then a + for a new one)
 
 final class NotePager: NSView {
     var onSelect: ((Int) -> Void)?
@@ -77,6 +77,12 @@ final class NotePager: NSView {
         self.count = max(count, 1)
         self.current = current
         needsDisplay = true
+    }
+
+    // ⌘⇧[ / ⌘⇧]: the dot before or after the current one; next from the last starts a new one
+    func step(_ delta: Int) {
+        let target = current + delta
+        if target == count { onAdd?() } else { onSelect?(target) }
     }
 
     // Under the mouse the dots grow inside a capsule, like the iOS page control
@@ -196,6 +202,7 @@ final class FadingField: NSTextField {
         layer?.mask = fade
         NotificationCenter.default.addObserver(self, selector: #selector(editorChanged(_:)),
                                                name: NSTextView.didChangeSelectionNotification, object: nil)
+        updateFades()   // a field made at its final size is never resized, and would stay masked out
     }
 
     required init?(coder: NSCoder) { fatalError() }
