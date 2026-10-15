@@ -59,10 +59,10 @@ The button goes away once the panel has been open for a minute, and returns at t
 
 1. Download `NotchNotes-vX.Y.Z.zip` from the [latest release](https://github.com/devadula-nandan/notch-notes/releases/latest).
 2. Unzip it and move `NotchNotes.app` to `/Applications`.
-3. Clear the macOS quarantine flag. This is needed once, because the app is ad-hoc signed rather than notarized:
+3. **If macOS blocks the app from opening**, you may need to remove its quarantine attribute. NotchNotes is currently ad-hoc signed and is not notarized by Apple. Only proceed if you trust the downloaded release.
+
    ```bash
-   xattr -cr /Applications/NotchNotes.app
-   ```
+   xattr -dr com.apple.quarantine /Applications/NotchNotes.app
 4. Open the app and hover over the notch.
 
 Later versions arrive through the [update button](#updates), so these steps are not repeated.
