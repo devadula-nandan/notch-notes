@@ -342,8 +342,8 @@
       <ol class="steps">
         <li>Download <code>NotchNotes-vX.Y.Z.zip</code> from the <a href="https://github.com/devadula-nandan/notch-notes/releases/latest">latest release</a>.</li>
         <li>Unzip it and move <code>NotchNotes.app</code> to <code>/Applications</code>.</li>
-        <li>Clear the macOS quarantine flag. This is needed once, because the app is ad-hoc signed rather than notarized.
-          <div class="cmd"><code id="cmd">xattr -cr /Applications/NotchNotes.app</code><button class="copy" type="button" data-copy="cmd">Copy</button></div>
+        <li>If macOS blocks the app from opening, you may need to remove its quarantine attribute. NotchNotes is currently ad-hoc signed and is not notarized by Apple. Only proceed if you trust the downloaded release.
+          <div class="cmd"><code id="cmd">xattr -dr com.apple.quarantine /Applications/NotchNotes.app</code><button class="copy" type="button" data-copy="cmd">Copy</button></div>
         </li>
         <li>Open the app and hover over the notch.
           <p class="note">To start it at login: System Settings → General → Login Items → <kbd>+</kbd> → select <code>NotchNotes.app</code>.</p>
