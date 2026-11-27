@@ -19,6 +19,7 @@ Hover over the notch and a panel drops down with your notes, a checklist, any we
 - **Checklists**: type `- [ ] item` or use the checklist button. Click a box to check it; checked items are struck through and move below the unchecked ones.
 - **Numbered and bulleted lists**: Enter continues the list and keeps the numbers in order. Tab and Shift-Tab move an item in or out a level.
 - **Links**: addresses in your notes are underlined. ⌘-click one to open it in the panel.
+- **Dates**: dates and times such as `24-11-2026`, `5pm` or `Nov 24 5pm` get a soft tint. When one is due (a date alone, at 00:00 that day) it turns red and pulses, or stays solid with Reduce Motion on, until you check the item or dismiss the reminder. A time alone means today. Relative dates such as `tomorrow` are not picked up.
 - **Font size**: set the editor font from 10 to 24 pt in the toolbar.
 
 ### Web pages
@@ -80,6 +81,7 @@ Later versions arrive through the [update button](#updates), so these steps are 
 | Check or uncheck an item | Click its box |
 | Indent a list item | Tab / Shift-Tab |
 | Open a link from the notes | ⌘-click it |
+| Dismiss a reminder | Right-click the due date, or press Ctrl-Return with the caret in it, then choose Dismiss Reminder |
 | Open or leave the terminal | Click the terminal button, or press ⌘T |
 | Go to the URL field | ⌘L |
 | Load a page | Type an address or a search, then press Return |

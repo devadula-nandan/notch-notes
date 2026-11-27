@@ -102,7 +102,7 @@ final class NotchContentView: NSView {
 // MARK: - Window controller
 
 final class NotchWindowController: NSWindowController {
-    private(set) var isExpanded = false
+    private(set) var isExpanded = false { didSet { textView.isPanelOpen = isExpanded } }
     private(set) var panelW = stored("panelW", default: 500)
     private(set) var panelH = stored("panelH", default: 280)
     private var fontSize = stored("fontSize", default: 13)
@@ -645,6 +645,7 @@ final class NotchWindowController: NSWindowController {
             ? "Couldn't read \(notes.name(at: index)). Fix or move the file, then relaunch."
             : "Type your notes here..."
         textView.undoManager?.removeAllActions()
+        textView.noteName = notes.name(at: index)
         textView.restyle()
         notesDirty = false
         UserDefaults.standard.set(notes.name(at: index), forKey: "currentNote")

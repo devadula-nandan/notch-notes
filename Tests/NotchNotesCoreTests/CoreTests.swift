@@ -165,3 +165,69 @@ import Testing
         #expect(try store.read(at: 0) == "a")
     }
 }
+
+// Fixed far-past and far-future years keep these off the clock. NSDataDetector reads no year past 2099.
+@Suite struct DateTextTests {
+    private let cal = Calendar.current
+
+    private func parts(_ d: Date) -> DateComponents {
+        cal.dateComponents([.year, .month, .day, .hour, .minute], from: d)
+    }
+
+    @Test func detectsNumericDate() {
+        let found = DateText.detect(in: "by 24-11-2050")
+        #expect(found.count == 1)
+        #expect(found[0].text == "24-11-2050")
+        #expect(found[0].range == NSRange(location: 3, length: 10))
+        #expect(found[0].due == cal.date(from: DateComponents(year: 2050, month: 11, day: 24)))
+    }
+
+    @Test func detectsTimeAndDateTime() {
+        let time = DateText.detect(in: "at 5pm")
+        #expect(time.count == 1)
+        #expect(time[0].text == "5pm")
+        #expect(parts(time[0].due).hour == 17 && parts(time[0].due).minute == 0)
+
+        let both = DateText.detect(in: "24-11-2050 09:30")
+        #expect(both.count == 1)
+        #expect(both[0].text == "24-11-2050 09:30")
+        let p = parts(both[0].due)
+        #expect(p.year == 2050 && p.month == 11 && p.day == 24 && p.hour == 9 && p.minute == 30)
+
+        #expect(DateText.detect(in: "17:30").count == 1)
+        #expect(DateText.detect(in: "Nov 24 5pm").count == 1)
+    }
+
+    @Test func rejectsInvalidAndOrdinaryText() {
+        for line in ["31-02-2050", "31-02-2050 03:00", "99:99", "may", "Monday", "noon", "hello world", "2026", "1234"] {
+            #expect(DateText.detect(in: line).isEmpty, "\(line)")
+        }
+    }
+
+    @Test func rejectsRelative() {
+        for line in ["tomorrow", "next Monday", "in 2 hours", "5pm tomorrow"] {
+            #expect(DateText.detect(in: line).isEmpty, "\(line)")
+        }
+    }
+
+    @Test func multipleDatesInALine() {
+        let found = DateText.detect(in: "24-11-2050 and 25-12-2050")
+        #expect(found.map(\.text) == ["24-11-2050", "25-12-2050"])
+        #expect(found[0].range.location < found[1].range.location)
+    }
+
+    @Test func stateUpcomingVsDue() {
+        let due = Date(timeIntervalSince1970: 1_000_000)
+        let d = DetectedDate(range: NSRange(location: 0, length: 1), text: "x", due: due)
+        #expect(DateText.state(of: d, now: due.addingTimeInterval(-1)) == .upcoming)
+        #expect(DateText.state(of: d, now: due) == .due)
+        #expect(DateText.state(of: d, now: due.addingTimeInterval(1)) == .due)
+    }
+
+    @Test func dateOnlyHasNoTimeComponent() {
+        #expect(DateText.hasTime("5pm"))
+        #expect(DateText.hasTime("17:30"))
+        #expect(DateText.hasTime("noon"))
+        #expect(!DateText.hasTime("24-11-2050"))
+    }
+}
